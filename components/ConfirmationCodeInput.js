@@ -1,6 +1,9 @@
-import React, {Component} from 'react';
+// @flow
+
+import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import { View, TextInput, StyleSheet, Dimensions, ViewPropTypes } from 'react-native';
+import { View, TextInput, StyleSheet, ViewPropTypes } from 'react-native';
+
 import _ from 'lodash';
 
 // if ViewPropTypes is not defined fall back to View.propType (to support RN < 0.44)
@@ -16,14 +19,19 @@ export default class ConfirmationCodeInput extends Component {
     className: PropTypes.string,
     cellBorderWidth: PropTypes.number,
     activeColor: PropTypes.string,
+    textColor: PropTypes.string,
+    errorColor: PropTypes.string,
     inactiveColor: PropTypes.string,
     ignoreCase: PropTypes.bool,
     autoFocus: PropTypes.bool,
     codeInputStyle: TextInput.propTypes.style,
     containerStyle: viewPropTypes.style,
     onFulfill: PropTypes.func,
+    onChange: PropTypes.func,
+    onFocus: PropTypes.func,
+    error: PropTypes.bool
   };
-  
+
   static defaultProps = {
     codeLength: 5,
     inputPosition: 'center',
@@ -31,196 +39,176 @@ export default class ConfirmationCodeInput extends Component {
     size: 40,
     className: 'border-box',
     cellBorderWidth: 1,
-    activeColor: 'rgba(255, 255, 255, 1)',
+    activeColor: 'rgba(255, 255, 255, 0.3)',
     inactiveColor: 'rgba(255, 255, 255, 0.2)',
+    errorColor: 'rgba(255, 255, 255, 0.2)',
+    textColor: 'rgba(0, 0, 0, 1)',
     space: 8,
     compareWithCode: '',
-    ignoreCase: false
+    ignoreCase: false,
+    onChange: _.noop,
+    onFocus: _.noop,
+    error: false
   };
-  
+
   constructor(props) {
     super(props);
-    
+
     this.state = {
       codeArr: new Array(this.props.codeLength).fill(''),
-      currentIndex: 0
+      currentIndex: 0,
+      focused: false
     };
-    
+
     this.codeInputRefs = [];
   }
-  
+
   componentDidMount() {
     const { compareWithCode, codeLength, inputPosition } = this.props;
     if (compareWithCode && compareWithCode.length !== codeLength) {
-      console.error("Invalid props: compareWith length is not equal to codeLength");
+      console.error(
+        'Invalid props: compareWith length is not equal to codeLength'
+      );
     }
-    
-    if (_.indexOf(['center', 'left', 'right', 'full-width'], inputPosition) === -1) {
-      console.error('Invalid input position. Must be in: center, left, right, full');
+
+    if (
+      _.indexOf(['center', 'left', 'right', 'full-width'], inputPosition) === -1
+    ) {
+      console.error(
+        'Invalid input position. Must be in: center, left, right, full'
+      );
     }
   }
-  
+
   clear() {
     this.setState({
       codeArr: new Array(this.props.codeLength).fill(''),
       currentIndex: 0
     });
-    this._setFocus(0);
+    this.setFocus(0);
   }
-  
-  _setFocus(index) {
+
+  setFocus(index) {
     this.codeInputRefs[index].focus();
   }
-  
+
   _blur(index) {
     this.codeInputRefs[index].blur();
   }
-  
+
   _onFocus(index) {
     let newCodeArr = _.clone(this.state.codeArr);
     const currentEmptyIndex = _.findIndex(newCodeArr, c => !c);
     if (currentEmptyIndex !== -1 && currentEmptyIndex < index) {
-      return this._setFocus(currentEmptyIndex);
+      return this.setFocus(currentEmptyIndex);
     }
     for (const i in newCodeArr) {
       if (i >= index) {
         newCodeArr[i] = '';
       }
     }
-    
+
+    this.props.onChange(newCodeArr.join(''));
+    this.props.onFocus();
+
     this.setState({
       codeArr: newCodeArr,
-      currentIndex: index
-    })
+      currentIndex: index,
+      focused: true
+    });
   }
-  
+
   _isMatchingCode(code, compareWithCode, ignoreCase = false) {
     if (ignoreCase) {
-      return code.toLowerCase() == compareWithCode.toLowerCase();
+      return code.toLowerCase() === compareWithCode.toLowerCase();
     }
-    return code == compareWithCode;
+    return code === compareWithCode;
   }
-  
+
   _getContainerStyle(size, position) {
-    switch (position) {
-      case 'left':
-        return {
-          justifyContent: 'flex-start',
-          height: size
-        };
-      case 'center':
-        return {
-          justifyContent: 'center',
-          height: size
-        };
-      case 'right':
-        return {
-          justifyContent: 'flex-end',
-          height: size
-        };
-      default:
-        return {
-          justifyContent: 'space-between',
-          height: size
-        }
-    }
+    return {
+      justifyContent: 'center',
+      height: size
+    };
   }
-  
+
   _getInputSpaceStyle(space) {
-    const { inputPosition } = this.props;
-    switch (inputPosition) {
-      case 'left':
-        return {
-          marginRight: space
-        };
-      case 'center':
-        return {
-          marginRight: space/2,
-          marginLeft: space/2
-        };
-      case 'right':
-        return {
-          marginLeft: space
-        };
-      default:
-        return {
-          marginRight: 0,
-          marginLeft: 0
-        };
-    }
+    return {
+      marginRight: space / 2,
+      marginLeft: space / 2
+    };
   }
-  
-  _getClassStyle(className, active) {
-    const { cellBorderWidth, activeColor, inactiveColor, space } = this.props;
+
+  _getBorderColor(active, error) {
+    if (error) return this.props.errorColor;
+    return active ? this.props.activeColor : this.props.inactiveColor;
+  }
+
+  _getClassStyle(className, active, error) {
+    const { cellBorderWidth, errorColor, space, textColor } = this.props;
+
     let classStyle = {
       ...this._getInputSpaceStyle(space),
-      color: activeColor
+      color: error ? errorColor : textColor
     };
-    
-    switch (className) {
-      case 'clear':
-        return _.merge(classStyle, { borderWidth: 0 });
-      case 'border-box':
-        return _.merge(classStyle, {
-          borderWidth: cellBorderWidth,
-          borderColor: (active ? activeColor : inactiveColor)
-        });
-      case 'border-circle':
-        return _.merge(classStyle, {
-          borderWidth: cellBorderWidth,
-          borderRadius: 50,
-          borderColor: (active ? activeColor : inactiveColor)
-        });
-      case 'border-b':
-        return _.merge(classStyle, {
-          borderBottomWidth: cellBorderWidth,
-          borderColor: (active ? activeColor : inactiveColor),
-        });
-      case 'border-b-t':
-        return _.merge(classStyle, {
-          borderTopWidth: cellBorderWidth,
-          borderBottomWidth: cellBorderWidth,
-          borderColor: (active ? activeColor : inactiveColor)
-        });
-      case 'border-l-r':
-        return _.merge(classStyle, {
-          borderLeftWidth: cellBorderWidth,
-          borderRightWidth: cellBorderWidth,
-          borderColor: (active ? activeColor : inactiveColor)
-        });
-      default:
-        return className;
-    }
+
+    return _.merge(classStyle, {
+      borderWidth: cellBorderWidth,
+      borderColor: this._getBorderColor(active, error)
+    });
   }
-  
+
   _onKeyPress(e) {
     if (e.nativeEvent.key === 'Backspace') {
-      const { currentIndex } = this.state;
+      // Return if duration between previous key press and backspace is less than 20ms
+      if (Math.abs(this.lastKeyEventTimestamp - e.timeStamp) < 20) return;
+
+      const { currentIndex, codeArr } = this.state;
       const nextIndex = currentIndex > 0 ? currentIndex - 1 : 0;
-      this._setFocus(nextIndex);
+
+      this.setState(
+        {
+          codeArr: [
+            ...codeArr.slice(0, nextIndex),
+            '',
+            ...codeArr.slice(nextIndex + 1)
+          ]
+        },
+        () => this.props.onChange(this.state.codeArr.join(''))
+      );
+
+      this.setFocus(nextIndex);
+    } else {
+      // Record non-backspace key event time stamp
+      this.lastKeyEventTimestamp = e.timeStamp;
     }
   }
-  
-  _onInputCode(character, index) {
+
+  _onInputCode(character, index, onChange) {
     const { codeLength, onFulfill, compareWithCode, ignoreCase } = this.props;
     let newCodeArr = _.clone(this.state.codeArr);
     newCodeArr[index] = character;
-    
-    if (index == codeLength - 1) {
+
+    if (index === codeLength - 1) {
       const code = newCodeArr.join('');
-      
+
       if (compareWithCode) {
-        const isMatching = this._isMatchingCode(code, compareWithCode, ignoreCase);
+        const isMatching = this._isMatchingCode(
+          code,
+          compareWithCode,
+          ignoreCase
+        );
         onFulfill(isMatching, code);
-        !isMatching && this.clear();
       } else {
         onFulfill(code);
       }
       this._blur(this.state.currentIndex);
     } else {
-      this._setFocus(this.state.currentIndex + 1);
+      this.setFocus(this.state.currentIndex + 1);
     }
-    
+
+    this.props.onChange(newCodeArr.join(''));
+
     this.setState(prevState => {
       return {
         codeArr: newCodeArr,
@@ -228,7 +216,7 @@ export default class ConfirmationCodeInput extends Component {
       };
     });
   }
-  
+
   render() {
     const {
       codeLength,
@@ -240,12 +228,12 @@ export default class ConfirmationCodeInput extends Component {
       size,
       activeColor
     } = this.props;
-    
+
     const initialCodeInputStyle = {
       width: size,
       height: size
     };
-    
+
     let codeInputs = [];
     for (let i = 0; i < codeLength; i++) {
       const id = i;
@@ -254,9 +242,13 @@ export default class ConfirmationCodeInput extends Component {
           key={id}
           ref={ref => (this.codeInputRefs[id] = ref)}
           style={[
-            styles.codeInput, 
-            initialCodeInputStyle, 
-            this._getClassStyle(className, this.state.currentIndex == id),
+            styles.codeInput,
+            initialCodeInputStyle,
+            this._getClassStyle(
+              className,
+              this.state.currentIndex === id && this.state.focused,
+              this.props.error
+            ),
             codeInputStyle
           ]}
           underlineColorAndroid="transparent"
@@ -264,18 +256,27 @@ export default class ConfirmationCodeInput extends Component {
           keyboardType={'name-phone-pad'}
           returnKeyType={'done'}
           {...this.props}
-          autoFocus={autoFocus && id == 0}
+          autoFocus={autoFocus && id === 0}
           onFocus={() => this._onFocus(id)}
-          value={this.state.codeArr[id] ? this.state.codeArr[id].toString() : ''}
+          onBlur={() => this.setState({ focused: false })}
+          value={
+            this.state.codeArr[id] ? this.state.codeArr[id].toString() : ''
+          }
           onChangeText={text => this._onInputCode(text, id)}
-          onKeyPress={(e) => this._onKeyPress(e)}
+          onKeyPress={e => this._onKeyPress(e)}
           maxLength={1}
         />
-      )
+      );
     }
-    
+
     return (
-      <View style={[styles.container, this._getContainerStyle(size, inputPosition), containerStyle]}>
+      <View
+        style={[
+          styles.container,
+          this._getContainerStyle(size, inputPosition),
+          containerStyle
+        ]}
+      >
         {codeInputs}
       </View>
     );
