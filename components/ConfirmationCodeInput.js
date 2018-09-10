@@ -80,12 +80,14 @@ export default class ConfirmationCodeInput extends Component {
     }
   }
 
-  clear() {
+  clear(focus) {
     this.setState({
       codeArr: new Array(this.props.codeLength).fill(''),
       currentIndex: 0
     });
-    this.setFocus(0);
+    if(focus) {
+      this.setFocus(0);
+    }
   }
 
   setFocus(index) {
